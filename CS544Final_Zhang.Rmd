@@ -1,0 +1,370 @@
+---
+title: "**Analysis of Bank Marketing Dataset**"
+author: "*Jiali Zhang - CS544 Term Project*"
+date: "*Dec 8th, 2021*"
+output: 
+  html_document:
+    fig_width: 8
+    code_folding: hide
+    highlight: tango
+    toc: true
+    toc_float:
+      collapsed: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+setwd(getwd())
+set.seed(6795)
+library(plotly)
+```
+
+## **Dataset Overview**
+```{r echo=FALSE, out.width='100%'}
+knitr::include_graphics('https://raw.githubusercontent.com/Androzhang/Course_project_Bank_data_EDA/main/bank.png')
+```
+This is a bank marketing data set from Kaggle with the size of 897.42 KB. It contains 17 columns and 11162 rows. From the data set, we can find bank customers' features such as age, job, marital status, education level, housing status, account balance, their past marketing responses, and so on. Through analyzing the customer characteristics in this data set, we could predict what type of customers would have higher account balance, and determine the key features of those who are more likely to subscribe our deposit service. This is meaningful for future marketing because it give us an idea about which groups of customers to target, so that the bank could smartly allocate marketing budget and optimize their future product offerings.
+
+## **Objectives**
+**The project will try to answer the following questions based on the dataset:**    
+ 1.People of what career have the most and the least amount of deposit in their bank account?  
+ 2.What's the relationship of age, account balance and marital status?  
+ 3.What's the comparison of account balance for the customers with and without housing?  
+ 4.What's the comparison of account balance for the customers with and without loan?  
+ 5.What's the difference in account balance for customers of different education levels?  
+ 6.How is the customer age distributed?  
+ 7.What's the most-perfered customer contact channel?
+ 
+**Techniques & methodology involved:**   
+ - Various sampling methods(Simple Random Sampling, Systematic Sampling, Stratified Sampling)  
+ - Central Limit Theorem  
+ - Interquartile Rule  
+ 
+## **Data Preparation**
+After checking the data completeness, I find that the data set is clean with no missing value, null values or duplicates. 
+```{r s1, echo=FALSE}
+library(ggplot2)
+library(plotly)
+library(RColorBrewer)
+#import the data
+df <- read.csv( "https://raw.githubusercontent.com/Androzhang/Course_project_Bank_data_EDA/main/bank.csv")
+```
+
+## **Exploratory Data Analysis**
+
+### Account balance by occupation
+In the original data set, there are job (categorical variable) and balance (numerical variable) column. However, directly ranking the total balance by job is not accurate enough to tell which career of people has the most/least deposit amount. Because the numbers of customers from those various career are different. We should calculate the average account balance of different occupations through the aggregate function( group by job, count the number of customers in that career, sum up the total balance of that career, and divide the balance of that career by the customer number). Thus, we get the average balance of that career. I plot the rank below with barchart which helps us to answer question 1. 
+
+```{r s2, echo=FALSE}
+
+job_count <- aggregate(df$balance, by=list(df$job), FUN=length)
+job_bal <- aggregate(df$balance, by=list(df$job), FUN=sum)
+df2 <- merge(x = job_count, y = job_bal, by = c("Group.1"), all = TRUE)
+colnames(df2) <- c("job", "job_count", "job_bal")
+df2[["avg_bal"]] <- df2$job_bal/df2$job_count
+
+p1 <- plot_ly(y = df2$job, x = df2$avg_bal, type = "bar", orientation = "h",
+              color = brewer.pal(n = 12, name = 'Paired'))
+p1 <- p1%>%layout(yaxis = list(categoryorder = 'total ascending'),
+                  xaxis = list(title = "$Avg account Balance"),
+                  showlegend = FALSE)
+p1
+```
+**Observation:** The retired people tend to have lager amount of deposit than the others, while the people from the services industry have the least balance in account.
+
+### Account balance by age
+
+```{r s3, echo=FALSE}
+p2 <- plot_ly(df, x = ~df$age, y = ~df$balance, type = "scatter", 
+              mode = "markers")%>%layout(yaxis = list(title = "$Account Balance"),
+                  xaxis = list(title = "Customer Age"), 
+                  showlegend = FALSE)
+p2
+
+```
+**Observation:** Age and balance are not perfectly positively correlated. The elderly do not necessarily have more balance in accounts. In this bank, most high-balance account owners are around age 30 to 60 except for very few outliers. 
+
+### Account balance by age and marital status
+```{r s4, echo=FALSE}
+library(dplyr)
+library(stats)
+library(base)
+?dplyr::filter
+?stats::filter
+
+df5 <- df %>%
+  group_by(age, marital) %>%
+  summarise(bal_sum=sum(balance),
+            bal_mean=(mean(balance)))
+
+a <- plot_ly(x = df5$age, y = df5$bal_sum, type = "bar", 
+              color = df5$marital)%>%layout(yaxis = list(title = "$Account Balance"),
+                  xaxis = list(title = "Customer Age"), 
+                  showlegend = TRUE)
+a
+```
+```{r s5, echo=FALSE}
+df3 <- aggregate(df$balance, by=list(df$marital), FUN=mean)
+colnames(df3) <- c("Marital_status", "Avg_balance")
+df3 <- df3[order(df3$Avg_balance, decreasing = TRUE), ]
+df3
+```
+
+**Observation:** On average married group have more balance than the single; the single have more balance than the divorced group. Most of the high-balance accounts belong to the married group of clients.
+
+### Account balance by housing and loan status
+```{r s6, echo=FALSE}
+df6 <- aggregate(df$balance, by=list(df$housing), FUN=mean)
+colnames(df6) <- c("Housing_status", "Avg_balance")
+df6 <- df6[order(df6$Avg_balance, decreasing = TRUE), ]
+
+df4 <- aggregate(df$balance, by=list(df$loan), FUN=mean)
+colnames(df4) <- c("Loan_status", "Avg_balance")
+df4 <- df4[order(df4$Avg_balance, decreasing = TRUE), ]
+
+fig <- plot_ly()
+fig <- fig %>% add_bars(data = df6, x = df6$Housing_status, y = df6$Avg_balance,
+                       name = "Housing", domain = list(row = 0, column = 0))
+fig <- fig %>% add_bars(data = df4, x = df4$Loan_status, y = df4$Avg_balance,
+                       name = "Loan", domain = list(row = 0, column = 1))
+
+fig <- fig %>% layout(title = "Avg account balance by housing and loan status",
+                      showlegend = T,
+                      xaxis = list(showgrid = TRUE, zeroline = TRUE, showticklabels = TRUE),
+                      yaxis = list(title = "$Avg account balance",showgrid = TRUE, zeroline = TRUE, showticklabels = TRUE))
+fig
+```
+**Observation:** Those who have no house tend to have more balance in bank account. Those who have no loan tend to have more balance in their account.
+
+
+### Account balance by education level
+```{r s7, echo=FALSE}
+p <- plot_ly(x = ~df$balance, type = "box")%>%layout(xaxis = list(title = "$Account Balance"),showlegend = FALSE)
+p
+```
+```{r s8, echo=FALSE}
+summary(df$balance)
+```
+
+```{r s9, echo=FALSE}
+#check the original data shape
+rn <- nrow(df)
+cn <- ncol(df)
+
+#Using the Interquartile Rule to Find Outliers
+Q3 <- summary(df$balance)[5]
+Q1 <- summary(df$balance)[2]
+IQR <- Q3 -Q1
+
+lower_limit <- Q1 - 1.5*IQR
+upper_limit <- Q1 + 1.5*IQR
+
+#subset the dataset
+df4 <- subset(df, df$balance > -2257 & df$balance <2501)
+
+#check the data shape after subset
+rn2 <- nrow(df4)
+cn2 <- ncol(df4)
+paste("As shown in the box plot, there are some outliers in the balance variable, which will prevent us from comparing the difference of balance by education. Therefore, I use IQR method in detecting outlier. The summary function gives us the lower and the upper limit of the balance:", lower_limit, "and", upper_limit, ". Then based on the Q1±1.5*IQR equation, ", rn-rn2, "outliers are detected and dropped. The dataset becomes", rn2, "rows and", cn2, "columns.")
+```
+
+```{r s10, echo=FALSE}
+p3 <- plot_ly(x = ~df4$balance, color = ~df4$education, type = "box")%>%layout(xaxis = list(title = "$Account Balance"),yaxis = list(title = "Educational Level"))
+p3 
+```
+**Observation:** Among primary, secondary and tertiary level education customers, the higher education level they have, the larger their balance medians are. So people with higher education level tend to deposit more money in their accounts.
+
+### Customer contact channels
+Contact is a categorical variabe in the dataset with value of "cellular", "telephone" and "unknown", which indicates the best way to reach the customer.
+```{r s11, echo=FALSE}
+c <- table(df$contact)
+c <- as.data.frame(c) 
+fig <- plot_ly(c, labels = ~Var1, values = ~Freq , type = 'pie')
+fig <- fig %>% layout(title = 'Customer contact channels',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+fig
+```
+**Observation:** Cellular is the most-prefered customer contact channel.
+
+### Customer age distribution
+```{r s12, echo=FALSE}
+p4 <- plot_ly(x = ~df$age, type = "histogram")%>%layout(xaxis = list(title = "Age"),yaxis = list(title = "Count"))
+p4 
+```
+**Observation:** The distribution of the customer age is right skewed. The customers in the bank are mainly from 30 to 40 years old. The age of 60 is a obvious threshold: the number of customers drops dramatically from age 60.
+
+## **Sampling**
+There are diversified sampling techniques that can help us select the representative portion of population in our analysis. In this course, we were taught Simple random sampling, System sampling, Stratified sampling and Cluster sampling. 
+
+### Simple Random Sampling & Central Limit Theorem
+Simple random sampling is a basic sampling technique where individual subjects are selected from a larger group. In simple random sampling, every item from a frame has the same chance for selection in the sample as every other item. Samples can be chosen with replacement or without replacement. This dataset have more than 10,000 piece of record and we only select 1000 samples, so we will select without replacement.
+```{r s13, echo=FALSE}
+set.seed(6795)
+samples <- 1000
+xbar <- numeric(samples)
+
+par(mfrow = c(2,2))
+
+for (size in c(10, 20, 30, 40)) {
+  
+  for (i in 1:samples) {
+    xbar[i] <- mean(sample(df$age, size = size, replace = FALSE))
+  }
+  
+  hist(xbar, main = paste("Sample Size =", size), col = rainbow(7))
+
+}
+
+par(mfrow = c(1,1))
+```
+```{r s14, echo=FALSE}
+paste("Original data:  Mean = ", mean(df$age), " SD =", sd(df$age))
+ 
+for (size in c(10, 20, 30, 40)) {
+  
+  for (i in 1:samples) {
+    xbar[i] <- mean(sample(df$age, size = size, replace = FALSE))
+  }
+  
+  cat("Sample Size = ", size, " Mean = ", mean(xbar),
+      " SD = ", sd(xbar), "\n")
+}
+```
+**Observation:** Although the customer age is not normally distributed, its sample means show the shape of a normal distribution when we have a large sample size. Furthermore, the means of the sample mean are close to the mean of the original data. The higher the sample size, the lower the standard deviations and the narrower the spread of the sample means."
+
+
+### Systematic Sampling
+In systematic sampling, samples from the population are selected according to a random starting point but with a fixed, periodic interval. This interval, called the sampling interval, is calculated by dividing the population size by the desired sample size. Here, the sample size is 500. Expand to see the implementation of systematic sampling.
+```{r s15, echo=TRUE}
+set.seed(6795)
+N <- nrow(df)
+n <- 500
+
+k <- ceiling(N/n)
+
+r <- sample(k,1)
+
+# select every kth item
+s<- seq(r, by = k, length = n)
+df_sys <- df[s,]
+
+df_sys <- df_sys[complete.cases(df_sys), ]
+
+```
+
+With those sampling method, we could have some representative subgroup for more granular visualization that is not feasible with the whole dataset. For example the bubble plot below. We could have insights about the number of days between targeted marketing and deposit subscription by account of different features.
+```{r s16, echo=FALSE}
+library(plotly)
+library(dplyr)
+bp <- plot_ly(df_sys, x = ~day, y = ~balance, text = ~education, type = 'scatter', mode = 'markers', size = ~balance, color = ~job, colors = 'Paired',
+        #Choosing the range of the bubbles' sizes:
+        sizes = c(10, 50),
+        marker = list(opacity = 0.5, sizemode = 'diameter'))
+bp <- bp %>% layout(title = 'Number of days between targeted marketing and deposit subscription',
+         xaxis = list(showgrid = FALSE),
+         yaxis = list(showgrid = FALSE),
+         showlegend = TRUE)
+
+bp
+
+```
+
+### Stratified Sampling
+In stratified sampling, the population is subdivided into sub populations, which is called stratum. The number of samples selected from each stratum is proportional to the relative size of that stratum with respect to the entire date set. Expand please see the implementation of Stratified sampling.
+
+```{r s17, echo=TRUE}
+library(sampling)
+library(UsingR)
+library(prob)
+set.seed(6795)
+
+freq <- table(df$job)
+df_o <- df[order(df$job),]
+st.sizes <- 500 * freq / sum(freq)
+
+st.sizes <- as.vector(st.sizes)
+st.sizes <- st.sizes[st.sizes != 0]
+st.sizes <- round(st.sizes)
+
+st <- sampling::strata(df_o, stratanames = c("job"), size = st.sizes, method = "srswr", description = F)
+
+df_str <- getdata(df, st)
+
+```
+### Cluster Sampling
+In cluster sampling, the sampling unit is the whole cluster; Instead of sampling individuals from within each group, a researcher will study whole clusters. Expand please see the implementation of cluster sampling.
+```{r s18, echo = TRUE}
+library(prob)
+set.seed(6795)
+
+cl <- sampling::cluster(df, c("job"), 
+              size = 5, method="srswr")
+
+df_cl <- getdata(df, cl)
+
+```
+
+```{r echo=FALSE, out.width='100%'}
+knitr::include_graphics('https://raw.githubusercontent.com/Androzhang/Course_project_Bank_data_EDA/main/WechatIMG618.jpeg')
+```
+
+### Comparison of data with different sampling methods
+1.Difference in the balance mean
+```{r s19, echo=FALSE}
+paste("The average balance from original dataset is", mean(df$balance))
+paste("The average balance from systematic sampling is", mean(df_sys$balance))
+paste("The average balance from stratified sampling is", mean(df_str$balance))
+paste("The average balance from cluster sampling is", mean(df_cl$balance))
+```
+
+2.Difference in the job structure
+```{r s20, echo=FALSE}
+library(plotly)
+library(dplyr)
+d <- table(df$job)
+d <- as.data.frame(d) 
+
+sys <- table(df_sys$job)
+sys <- as.data.frame(sys) 
+
+str <- table(df_str$job)
+str <- as.data.frame(str) 
+
+cl <- table(df_cl$job)
+cl <- as.data.frame(cl)
+
+
+fig <- plot_ly()
+fig <- fig %>% add_pie(data = d, labels = ~Var1, values = ~Freq,
+                         name = "Original data", domain = list(row = 0, column = 0))
+fig <- fig %>% add_pie(data = sys, labels = ~Var1, values = ~Freq,
+                       name = "Systematic sampling", domain = list(row = 0, column = 1))
+fig <- fig %>% add_pie(data = str, labels = ~Var1, values = ~Freq,
+                       name = "Stratified sampling", domain = list(row = 1, column = 0))
+fig <- fig %>% add_pie(data = cl, labels = ~Var1, values = ~Freq,
+                       name = "Cluster sampling", domain = list(row = 1, column = 1))
+fig <- fig %>% layout(title = "Comparison of sample job structure by different sampling methods", showlegend = F,
+                      grid=list(rows=2, columns=2),
+                      xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                      yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+fig
+```
+**Observation:** 
+From the four pie charts, we could see that the percentage of different jobs are the same for the original data and the subset from stratified sampling. Because the number of samples selected from each stratum is proportional to the relative size of that stratum with respect to the entire date set. 
+
+## **Conclusion**
+**Throughout the analysis, we have answered the questions in the project objectives.**    
+ 1.The retired customer have the most account balance, and those in the service industry have the least.  
+ 2.Age and balance are not perfectly positively related.  
+ On average, the married group have more balance than the single; the single have more balance than the divorced group.
+ 3.Those who have no house tend to have more balance in bank account.  
+ 4.Those who have no loan tend to have more balance in their account.  
+ 5.People with higher education level tend to deposit more money in their accounts.  
+ 6.The distribution of the customer age is right skewed. The customers in the bank are mainly from 30 to 40 years old.  
+ 7.The most-prefered customer contact channel is cellular.
+ 
+**Future improvement**  
+We could use machine learning technique on this dataset to have better prediction for future market campaign.
